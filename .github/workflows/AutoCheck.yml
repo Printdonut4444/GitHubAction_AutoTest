@@ -1,0 +1,80 @@
+name: Check Syntax
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  check-syntax:
+    if: ${{ github.event.head_commit && !startsWith(github.event.head_commit.message, 'Merge ') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # จำเป็นต้องดึง History ทั้งหมดเพื่อเปรียบเทียบ diff กับ main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Linters
+        run: npm install -g htmlhint jshint stylelint stylelint-config-standard
+
+      # 1. ตรวจเฉพาะไฟล์ HTML ที่แก้ไข
+      - name: Check HTML (Changed files only)
+        run: |
+          HTML_FILES=$(git diff --name-only origin/main...HEAD | grep '\.html$' || true)
+          if [ -n "$HTML_FILES" ]; then
+            echo "Found changed HTML files:"
+            echo "$HTML_FILES"
+            htmlhint $HTML_FILES
+          else
+            echo "No changed HTML files to check."
+          fi
+
+      # 2. ตรวจเฉพาะไฟล์ JS ที่แก้ไข
+      - name: Check JS (Changed files only)
+        run: |
+          JS_FILES=$(git diff --name-only origin/main...HEAD | grep '\.js$' || true)
+          if [ -n "$JS_FILES" ]; then
+            echo "Found changed JS files:"
+            echo "$JS_FILES"
+            # สร้างไฟล์ตั้งค่าให้ JSHint รองรับ ES6 (const, let, arrow function)
+            echo '{"esversion": 6}' > .jshintrc
+            jshint $JS_FILES
+          else
+            echo "No changed JS files to check."
+          fi
+
+      # 3. ตรวจเฉพาะไฟล์ CSS ที่แก้ไข
+      - name: Check CSS (Changed files only)
+        run: |
+          CSS_FILES=$(git diff --name-only origin/main...HEAD | grep '\.css$' || true)
+          if [ -n "$CSS_FILES" ]; then
+            echo "Found changed CSS files:"
+            echo "$CSS_FILES"
+            echo '{"extends": "stylelint-config-standard"}' > .stylelintrc
+            npx stylelint $CSS_FILES
+          else
+            echo "No changed CSS files to check."
+          fi
+
+      - name: Check Regex in JS
+        run: |
+          # ค้นหาว่าในไฟล์ script.js มีการใช้ Regex /^[a-zA-Zก-ฮะ-์]+$/ หรือไม่
+          if grep -q "\[a-zA-Z" script.js; then
+            echo "✅ ผ่าน: พบโค้ดดักจับตัวอักษรในไฟล์ JS"
+          else
+            echo "❌ ไม่ผ่าน: คุณลืมเขียนโค้ดดักจับตัวเลขและอักขระพิเศษใน JS!"
+            exit 1 # สั่งให้ Workflow แจ้ง Error สีแดง
+          fi
+
+      - name: Run UI Automation Test
+        run: |
+          echo "Installing Puppeteer..."
+          npm install puppeteer
+          echo "Running UI tests..."
+          node ui-test.js

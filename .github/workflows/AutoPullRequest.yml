@@ -1,0 +1,48 @@
+name: Auto Create Pull Request
+
+on:
+  workflow_run:
+    # ระบุชื่อ name ของไฟล์ที่ 1 ให้ตรงกันเป๊ะๆ
+    workflows: ["Check Syntax"]
+    types:
+      - completed
+
+jobs:
+  create-pr:
+    # ทำงานเมื่อไฟล์ที่ 1 รันผ่านสำเร็จเท่านั้น
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      - name: Create PR to main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --base main --state open --json number -q '.[0].number')
+
+          if [ -z "$EXISTING_PR" ]; then
+            COMMIT_MSG=$(git log -1 --format=%s)
+            
+            if [ -n "$COMMIT_MSG" ]; then
+              PR_TITLE="$COMMIT_MSG"
+            else
+              PR_TITLE="คำขอ merge จาก branch $BRANCH_NAME เข้า main"
+            fi
+
+            echo "Creating PR with title: '$PR_TITLE'"
+            gh pr create \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --title "$PR_TITLE" \
+              --body "Automated PR created after syntax check passed successfully."
+          else
+            echo "PR already exists (#$EXISTING_PR) for branch '$BRANCH_NAME'. Skipping creation."
+          fi

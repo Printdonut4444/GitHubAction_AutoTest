@@ -1,0 +1,17 @@
+name: Auto Alert
+
+on:
+  # schedule:
+  #   - cron: '1 1 * 1 *'
+  workflow_dispatch:
+
+jobs:
+  notify-hello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Print Dynamic Greeting
+        run: |
+          echo "Hello "
